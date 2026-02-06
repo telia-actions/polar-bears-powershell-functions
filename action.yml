@@ -1,0 +1,46 @@
+name: "Polar Bears PowerShell Functions"
+description: "Makes shared PowerShell functions available to later steps"
+runs:
+  using: "composite"
+  steps:
+    - name: Create module folder
+      shell: powershell # shell value should be "powershell", not "pwsh", unless Powershell 7 is installed in a runner.
+      run: |
+        $modulesRoot = Join-Path $env:RUNNER_TEMP "Modules"
+        New-Item -ItemType Directory -Force -Path $modulesRoot | Out-Null
+        
+        $moduleName = 'PolarBearsPSFunctions'
+        $moduleDir  = Join-Path $modulesRoot $moduleName
+        New-Item -ItemType Directory -Force -Path $moduleDir | Out-Null
+        
+        $psm1 = @'
+        
+            function Copy-Files {
+                [CmdletBinding()]
+                param (
+                    [Parameter(Mandatory)]
+                    [string]$Source,
+                    [Parameter(Mandatory)]
+                    [string]$Destination
+                )
+            
+                $options = @("*.*", "/s", "/COPY:DAT", "/NODCOPY")
+                $args = @($Source, $Destination) + $options
+            
+                $p = Start-Process -FilePath robocopy -ArgumentList $args -Wait -PassThru -NoNewWindow
+                $rc = $p.ExitCode
+            
+                if ($rc -ge 8) {
+                    throw "Robocopy failed with exit code $rc."
+                } else {
+                    Write-Host "Robocopy completed with exit code $rc."
+                }
+            }
+            
+        '@
+        
+        $psm1Path = Join-Path $moduleDir "$moduleName.psm1"
+        $psm1 | Set-Content -Path $psm1Path -Encoding UTF8
+        
+        $newPSModulePath = "$modulesRoot" + [IO.Path]::PathSeparator + $env:PSModulePath
+        "PSModulePath=$newPSModulePath" | Out-File -FilePath $env:GITHUB_ENV 
